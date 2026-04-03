@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.22.0"
+__generated_with = "0.22.3"
 app = marimo.App(width="medium", sql_output="pandas")
 
 
@@ -74,6 +74,15 @@ def _(duck, mo, pbf):
         """,
         engine=duck
     )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Abfrage der Grenzen
+    - https://wiki.openstreetmap.org/wiki/Tag:boundary%3Dadministrative#admin_level=*_Country_specific_values
+    """)
     return
 
 
