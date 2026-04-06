@@ -4,6 +4,14 @@ __generated_with = "0.22.3"
 app = marimo.App(width="medium", sql_output="pandas")
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # Auswerten der RBL-Aufzeichnungen aus IVU.control
+    """)
+    return
+
+
 @app.cell
 def _():
     import marimo as mo
@@ -29,6 +37,14 @@ def _(duck, mo, rt_red):
         """,
         engine=duck
     )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Testen der Ersetzenfunktion wegen unterschiedlicher Codierung
+    """)
     return
 
 
@@ -72,19 +88,19 @@ def _(duck):
         lpad(nr::TEXT, 2, '0') || ' ' || haltestelle_name.replace ('Ã¼', 'ü').replace ('Ã', 'ß').replace ('Ã¶', 'ö').replace('Ã¤', 'ä') as nr_name,
         abwab / 60 as ab_minute,
         abwan / 60 as an_minute
-    from
-        rt_red
-    where
-        kurs = {fnr}
-        -- Bestimmen des Toleranzbereichs für Abweichungen nach oben und unten 
-        and abwab < 1800
-        and abwab > -120
-        and abwan < 1800
-        and abwan > -120
-        -- Zeitbereich
-        and datum >= '{start_datum}'
-        and datum <= '{ende_datum}'
-        """).df()
+        from
+            rt_red
+        where
+            kurs = {fnr}
+            -- Bestimmen des Toleranzbereichs für Abweichungen nach oben und unten 
+            and abwab < 1800
+            and abwab > -120
+            and abwan < 1800
+            and abwan > -120
+            -- Zeitbereich
+            and datum >= '{start_datum}'
+            and datum <= '{ende_datum}'
+            """).df()
         return df
 
 
@@ -195,6 +211,19 @@ def _():
     start_datum = '2025-10-01'
     ende_datum = '2026-12-31'
     return ende_datum, start_datum
+
+
+@app.cell(hide_code=True)
+def _(duck, mo, rt_red):
+    _df = mo.sql(
+        f"""
+        select * from rt_red 
+            where kurs = 6405426
+        and datum >= start_datum
+        """,
+        engine=duck
+    )
+    return
 
 
 @app.cell(hide_code=True)
