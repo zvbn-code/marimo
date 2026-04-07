@@ -23,10 +23,23 @@ def _():
 
 
 @app.cell
-def _():
-    start_datum = '2025-10-01'
-    ende_datum = '2026-12-31'
+def _(mo):
+    start_datum = mo.ui.date(label="Start Datum", value= '2025-10-01')
+    ende_datum = mo.ui.date(label="Ende Datum", value= '2026-12-31')
     return ende_datum, start_datum
+
+
+@app.cell
+def _(ende_datum, mo, start_datum):
+    mo.vstack([start_datum, ende_datum, mo.md(f"Zeitbereich Auswertung (inkl.): {start_datum.value} bis {ende_datum.value}")])
+    return
+
+
+@app.cell
+def _():
+    #start_datum = '2025-10-01'
+    #ende_datum = '2026-12-31'
+    return
 
 
 @app.cell
@@ -84,7 +97,7 @@ def _(mo):
 
 @app.cell
 def _(duck):
-    def df_res(fnr, start_datum, ende_datum):
+    def df_res(fnr, start, ende):
         """Erstellt den Ergebnisdataframe für die ausgewählte Fahrt
         Rausfiltern besonders hoher Abweichungen und Begrenzung des Zeitbereichs
         """
@@ -108,8 +121,8 @@ def _(duck):
             and abwan < 1800
             and abwan > -120
             -- Zeitbereich
-            and datum >= '{start_datum}'
-            and datum <= '{ende_datum}'
+            and datum >= '{start}'
+            and datum <= '{ende}'
             """).df()
         return df
 
@@ -157,23 +170,99 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(duck, ende_datum, mo, rt_red, start_datum):
+def _(duck, mo, rt_red):
     _df = mo.sql(
         f"""
         select
-            datum,
-            linie,
-            kurs,
-            count(*) as anz_hst,
-            count(*) filter(abwan not null) as an_not_null,
-            count(*) filter(abwab not null) as ab_not_null
+            min(datum),
+            max(datum),
+            linie
         from
             rt_red
         where
-            datum >= '{start_datum}'
-            and datum <= '{ende_datum}'
-            and kurs = 6405426
-        group by all
+            linie::text like '%102%'
+        group by ALL
+        order by
+            linie
+        """,
+        engine=duck
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Ermitteln der Häufigkeit einer Fahrt auch bei unterschiedlichen Anzahlen von Haltestellen
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(duck, mo, rt_red):
+    df_fahrtliste2 = mo.sql(
+        f"""
+        select
+            *
+        from
+            (
+                select
+                    buendel,
+                    linie,
+                    anz_hst,
+                    kurs,
+                    anz,
+                    sum(anz) over (
+                        partition by
+                            kurs
+                    ) as ges_erhoben,
+                    max(anz) over (
+                        partition by
+                            kurs
+                    ) as meist_erhoben,
+                    list_datum,
+                from
+                    (
+                        select
+                            buendel,
+                            linie,
+                            kurs,
+                            anz_hst,
+                            count(*) as anz,
+                            list(datum) as list_datum
+                        FROM
+                            (
+                                select
+                                    datum,
+                                    buendel,
+                                    linie,
+                                    kurs,
+                                    count(*) as anz_hst,
+                                    count(*) filter(abwan not null) as an_not_null,
+                                    count(*) filter(abwab not null) as ab_not_null
+                                from
+                                    rt_red
+                                where
+                                    datum >= '2025-10-01'
+                                    and datum <= '2025-11-12'
+                                    -- and linie = 6440
+                                group by all
+                                order by
+                                    kurs,
+                                    datum
+                            ) as foo
+                        where
+                            ab_not_null > 2
+                            and an_not_null > 2
+                        group by all
+                    ) as foo2
+                order by
+                    kurs
+            )
+        WHERE
+            anz = meist_erhoben
+        order by
+            kurs
         """,
         engine=duck
     )
@@ -185,6 +274,7 @@ def _(duck, ende_datum, mo, rt_red, start_datum):
     df_fahrtliste = mo.sql(
         f"""
         select
+            buendel,
             linie,
             kurs,
             count(*) as anz_fahrten,
@@ -198,6 +288,7 @@ def _(duck, ende_datum, mo, rt_red, start_datum):
             (
                 select
                     datum,
+                    buendel,
                     linie,
                     kurs,
                     count(*) as anz_hst,
@@ -206,8 +297,8 @@ def _(duck, ende_datum, mo, rt_red, start_datum):
                 from
                     rt_red
                 where
-                    datum >= '{start_datum}'
-                    and datum <= '{ende_datum}'
+                    datum >= '{start_datum.value}'
+                    and datum <= '{ende_datum.value}'
                 group by all
             )
         where
@@ -215,7 +306,7 @@ def _(duck, ende_datum, mo, rt_red, start_datum):
             an_not_null > 2
             and ab_not_null > 2) as foo
 
-    
+
             group by all
         order by
             linie,
@@ -224,6 +315,18 @@ def _(duck, ende_datum, mo, rt_red, start_datum):
         engine=duck
     )
     return (df_fahrtliste,)
+
+
+@app.cell
+def _(df_res):
+    df_res(fnr=1226002, start='2025-11-12', ende='2025-11-12')
+    return
+
+
+@app.cell
+def _(df_fahrtliste):
+    df_fahrtliste.query("kurs == 1226002")
+    return
 
 
 @app.cell
@@ -244,7 +347,7 @@ def _(df_fahrten_sel):
 
 @app.cell
 def _(df_fahrten_sel):
-    df_fahrten_sel[['linie', 'kurs', 'von', 'bis', 'anz_fahrten', 'link']].style.format({"von": lambda t: t.strftime("%Y-%m-%d"), "bis": lambda t: t.strftime("%Y-%m-%d")}, precision=0).to_html('out/liste.html', index=False, escape=False)
+    df_fahrten_sel[['buendel','linie', 'kurs', 'von', 'bis', 'anz_fahrten', 'link']].style.format({"von": lambda t: t.strftime("%Y-%m-%d"), "bis": lambda t: t.strftime("%Y-%m-%d")}, precision=0).to_html('out/liste.html', index=False, escape=False)
     return
 
 
@@ -254,7 +357,7 @@ def _(duck, mo, rt_red, start_datum):
         f"""
         select * from rt_red 
             where kurs = 6405426
-        and datum >= '{start_datum}'
+        and datum >= '{start_datum.value}'
         """,
         engine=duck
     )
@@ -287,8 +390,8 @@ def _(duck, mo, rt_red, start_datum):
         f"""
         select *
         from rt_red
-        where kurs = 1131123 
-        and datum >= '{start_datum}'
+        where kurs = 1012078 
+        and datum >= '{start_datum.value}'
         """,
         engine=duck
     )
@@ -297,15 +400,15 @@ def _(duck, mo, rt_red, start_datum):
 
 @app.cell
 def _(df_res, ende_datum, start_datum):
-    df_res(fnr=6405426, start_datum=start_datum, ende_datum=ende_datum)
+    df_res(fnr=1012078 , start=start_datum.value, ende=ende_datum.value)
     return
 
 
 @app.cell
 def _(chart_func, df_fahrten_sel, df_res, ende_datum, start_datum):
-    for j, value in df_fahrten_sel[0:10000].iterrows():
+    for j, value in df_fahrten_sel[0:10].iterrows():
         _fnr = int(value['kurs'])
-        _df = df_res(fnr=_fnr, start_datum=start_datum, ende_datum=ende_datum)
+        _df = df_res(fnr=_fnr, start=start_datum.value, ende=ende_datum.value)
 
         print(int(value['kurs']), _df.datum.min())
 
@@ -329,8 +432,8 @@ def _(mo):
 
 @app.cell
 def _(chart_func, df_res, ende_datum, start_datum):
-    _fnr = 1330011
-    _df = df_res(fnr=_fnr, start_datum=start_datum, ende_datum=ende_datum)
+    _fnr = 1102031
+    _df = df_res(fnr=_fnr, start=start_datum.value, ende=ende_datum.value)
     min_datum = _df.datum.min().date().strftime('%Y-%m-%d')
     max_datum = _df.datum.max().date().strftime('%Y-%m-%d')    
     anzahl = _df.datum.drop_duplicates().count() 
