@@ -23,6 +23,13 @@ def _():
 
 
 @app.cell
+def _():
+    start_datum = '2025-10-01'
+    ende_datum = '2026-12-31'
+    return ende_datum, start_datum
+
+
+@app.cell
 def _(duckdb):
     db = 'ivu_rt_superset.db' # aus dem Verzeichnis python/ivu/db
     duck = duckdb.connect(db, read_only=True)
@@ -52,9 +59,12 @@ def _(mo):
 def _(duck, mo, rt_red):
     _df = mo.sql(
         f"""
-        select haltestelle_name.replace ('Ã¼', 'ü').replace ('Ã', 'ß').replace ('Ã¶', 'ö').replace('Ã¤', 'ä')
-        from rt_red
-            where haltestelle_name.replace ('Ã¼', 'ü').replace ('Ã', 'ß').replace ('Ã¶', 'ö').replace('Ã¤', 'ä') like '%Nordwohlde%'
+        select
+            haltestelle_name.replace ('Ã¼', 'ü').replace ('Ã', 'ß').replace ('Ã¶', 'ö').replace ('Ã¤', 'ä') as hst
+        from
+            rt_red
+        where
+            hst like '%Nordwohlde%'
         group by all
         """,
         engine=duck
@@ -148,6 +158,30 @@ def _(mo):
 
 @app.cell(hide_code=True)
 def _(duck, ende_datum, mo, rt_red, start_datum):
+    _df = mo.sql(
+        f"""
+        select
+            datum,
+            linie,
+            kurs,
+            count(*) as anz_hst,
+            count(*) filter(abwan not null) as an_not_null,
+            count(*) filter(abwab not null) as ab_not_null
+        from
+            rt_red
+        where
+            datum >= '{start_datum}'
+            and datum <= '{ende_datum}'
+            and kurs = 6405426
+        group by all
+        """,
+        engine=duck
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(duck, ende_datum, mo, rt_red, start_datum):
     df_fahrtliste = mo.sql(
         f"""
         select
@@ -159,22 +193,30 @@ def _(duck, ende_datum, mo, rt_red, start_datum):
             max(anz_hst) - min(anz_hst) diff_anz_hst,
             min(datum) as von,
             max(datum) as bis,
-            '<a href="chart_'||kurs::int||'.html">Link</a>' as link
-        from
+            '<a href="chart_' || kurs::int || '.html">Link</a>' as link
+        from (select * from 
             (
                 select
                     datum,
                     linie,
                     kurs,
-                    count(*) as anz_hst
+                    count(*) as anz_hst,
+                    count(*) filter(abwan not null) as an_not_null,
+                    count(*) filter(abwab not null) as ab_not_null
                 from
                     rt_red
                 where
                     datum >= '{start_datum}'
                     and datum <= '{ende_datum}'
                 group by all
-            ) as foo
-        group by all
+            )
+        where
+            -- Mindestanzahl der Abfahrten / Ankünfte mit Echtzeit
+            an_not_null > 2
+            and ab_not_null > 2) as foo
+
+    
+            group by all
         order by
             linie,
             kurs
@@ -190,7 +232,7 @@ def _(df_fahrtliste):
     ## - mit einer gewissen Anzahl von Fahrten und 
     ## - gleicher Anzahl Haltestellen und 
     ## - mehr als zwei Haltestellen mit fehlender Angaben zu Abwwichung An/ab
-    df_fahrten_sel = df_fahrtliste.query('(anz_fahrten > 5) and (abs(diff_anz_hst) == 0) and (min_anz_hst > 2)')
+    df_fahrten_sel = df_fahrtliste.query("(anz_fahrten > 5) and (abs(diff_anz_hst) == 0) and (min_anz_hst > 2) ")
     return (df_fahrten_sel,)
 
 
@@ -206,20 +248,13 @@ def _(df_fahrten_sel):
     return
 
 
-@app.cell
-def _():
-    start_datum = '2025-10-01'
-    ende_datum = '2026-12-31'
-    return ende_datum, start_datum
-
-
 @app.cell(hide_code=True)
-def _(duck, mo, rt_red):
+def _(duck, mo, rt_red, start_datum):
     _df = mo.sql(
         f"""
         select * from rt_red 
             where kurs = 6405426
-        and datum >= start_datum
+        and datum >= '{start_datum}'
         """,
         engine=duck
     )
@@ -262,12 +297,7 @@ def _(duck, mo, rt_red, start_datum):
 
 @app.cell
 def _(df_res, ende_datum, start_datum):
-    df_res(fnr='6405426', start_datum=start_datum, ende_datum=ende_datum)
-    return
-
-
-@app.cell
-def _():
+    df_res(fnr=6405426, start_datum=start_datum, ende_datum=ende_datum)
     return
 
 
