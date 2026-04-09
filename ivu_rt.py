@@ -58,7 +58,8 @@ def _(duck, mo, rt_red):
     _df = mo.sql(
         f"""
         select
-            count(*) as anzahl,
+            count(*) as anzahl_zeilen,
+            count(*) filter (abwan not null) an_zeilen_ohne_null, 
             count(distinct linie) as anzahl_linien,
             min(datum).strftime('%Y-%m-%d') as beginn,
             max(datum).strftime('%Y-%m-%d') as ende
@@ -142,31 +143,27 @@ def _(duck):
 
 @app.cell
 def _(duck):
-    def df_res_list(fnr, list_date):
+    def df_res_list(fnr):
         """Erstellt den Ergebnisdataframe für die ausgewählte Fahrt
         Rausfiltern besonders hoher Abweichungen und Begrenzung des Zeitbereichs über Liste der verkehrenden Tage
         """
         df = duck.sql(f"""
-        select
-        datum,
-        kurs,
-        nr,
-        haltestelle_name,
+    select
+        l.datum,
+        l.kurs,
+        l.nr,
+        l.haltestelle_name,
         -- Ersetzen der Zeichen wegen unterschiedlicher Codierung der Haltestellennamen
-        lpad(nr::TEXT, 2, '0') || ' ' || haltestelle_name.replace ('Ã¼', 'ü').replace ('Ã', 'ß').replace ('Ã¶', 'ö').replace('Ã¤', 'ä').replace('ß¤', 'ä') as nr_name,
-        abwab / 60 as ab_minute,
-        abwan / 60 as an_minute
-        from
-            rt_red
-        where
-            kurs = {fnr}
-            -- Bestimmen des Toleranzbereichs für Abweichungen nach oben und unten 
-            and abwab < 1800
-            and abwab > -120
-            and abwan < 1800
-            and abwan > -120
-            -- Zeitbereich
-            and datum in {list_date}
+        lpad(l.nr::TEXT, 2, '0') || ' ' || l.haltestelle_name.replace ('Ã¼', 'ü').replace ('Ã', 'ß').replace ('Ã¶', 'ö').replace ('Ã¤', 'ä').replace ('ß¤', 'ä') as nr_name,
+        l.abwab / 60 as ab_minute,
+        l.abwan / 60 as an_minute
+    from
+        rt_red l
+        join tbl_fahrtliste s on s.kurs = l.kurs
+        and l.datum in s.list_datum
+    where
+        l.kurs = {fnr}
+    order by datum, kurs, nr
             """).df()
         return df
 
@@ -213,27 +210,6 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(duck, mo, rt_red):
-    _df = mo.sql(
-        f"""
-        select
-            min(datum),
-            max(datum),
-            linie
-        from
-            rt_red
-        where
-            linie::text like '%102%'
-        group by ALL
-        order by
-            linie
-        """,
-        engine=duck
-    )
-    return
-
-
-@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     ### Ermitteln der Häufigkeit einer Fahrt auch bei unterschiedlichen Anzahlen von Haltestellen
@@ -245,7 +221,8 @@ def _(mo):
 def _(duck, ende_datum, mo, rt_red, start_datum):
     _df = mo.sql(
         f"""
-        create or replace temp table tbl_fahrtliste as
+        -- erstellen einer temporären Tabelle mit der Liste der Fahrten und auswertbaren Tagen
+        create or replace table tbl_fahrtliste as
         select
             * exclude (anz)
         from
@@ -321,7 +298,35 @@ def _(duck, ende_datum, mo, rt_red, start_datum):
 
 
 @app.cell(hide_code=True)
-def _():
+def _(duck, mo, rt_red, tbl_fahrtliste):
+    _df = mo.sql(
+        f"""
+        select
+            l.datum,
+            l.kurs,
+            l.nr,
+            l.haltestelle_name,
+            -- Ersetzen der Zeichen wegen unterschiedlicher Codierung der Haltestellennamen
+            lpad(l.nr::TEXT, 2, '0') || ' ' || l.haltestelle_name.replace ('Ã¼', 'ü').replace ('Ã', 'ß').replace ('Ã¶', 'ö').replace ('Ã¤', 'ä').replace ('ß¤', 'ä') as nr_name,
+            l.abwab / 60 as ab_minute,
+            l.abwan / 60 as an_minute
+        from
+            rt_red l
+            join tbl_fahrtliste s on s.kurs = l.kurs
+            and l.datum in s.list_datum
+        where
+            l.kurs = 1226002
+        order by datum, kurs, nr
+        -- limit 10000
+        """,
+        engine=duck
+    )
+    return
+
+
+@app.cell
+def _(df_res_list):
+    df_res_list(fnr=1226002)
     return
 
 
@@ -373,22 +378,6 @@ def _(duck, ende_datum, mo, rt_red, start_datum):
     return
 
 
-@app.cell(hide_code=True)
-def _(duck, mo, rt_red, tbl_fahrtliste):
-    _df = mo.sql(
-        f"""
-        select
-            *
-        from
-            tbl_fahrtliste sel
-            join rt_red o on sel.kurs = o.kurs
-            and o.datum in sel.list_datum
-        """,
-        engine=duck
-    )
-    return
-
-
 @app.cell
 def _(df_res):
     df_res(fnr=1226002, start='2025-11-12', ende='2025-11-12')
@@ -396,12 +385,12 @@ def _(df_res):
 
 
 @app.cell
-def _(df_fahrtliste2):
+def _(duck):
     # Filterung auf Fahrten 
     ## - mit einer gewissen Anzahl von Fahrten und 
     ## - gleicher Anzahl Haltestellen und 
     ## - mehr als zwei Haltestellen mit fehlender Angaben zu Abwwichung An/ab
-    df_fahrten_sel = df_fahrtliste2.query("(anz_erhoben > 3) and (anz_hst > 2) ")
+    df_fahrten_sel = duck.sql("from tbl_fahrtliste").df()
     return (df_fahrten_sel,)
 
 
@@ -496,42 +485,29 @@ def _(df_res, ende_datum, start_datum):
     return
 
 
-@app.cell(hide_code=True)
-def _(df_fahrten_sel, duck, mo):
-    _df = mo.sql(
-        f"""
-        select
-            kurs, UNNEST(LIST_datum_sep)
-        from
-            df_fahrten_sel
-        """,
-        engine=duck
-    )
+@app.cell
+def _():
+    #for j, value in df_fahrten_sel[0:10].iterrows():
+    #    _fnr = int(value['kurs'])
+    #    _list_datum_str = value['list_datum']
+    #    print(_fnr, _list_datum_str)
+    #    _df = df_res_list(fnr=_fnr)
     return
 
 
 @app.cell
-def _(df_fahrten_sel, df_res_list):
-    for j, value in df_fahrten_sel[0:10].iterrows():
+def _(chart_func, df_fahrten_sel, df_res_list):
+    for j, value in df_fahrten_sel[0:10000].iterrows():
         _fnr = int(value['kurs'])
-        _list_datum_str = value['list_datum']
-        print(_fnr, _list_datum_str)
-        _df = df_res_list(fnr=_fnr, list_date= _list_datum_str)
-    return
+        _df = df_res_list(fnr=_fnr)
 
-
-@app.cell
-def _(chart_func, df_fahrten_sel, df_res, ende_datum, start_datum):
-    for j, value in df_fahrten_sel[0:10].iterrows():
-        _fnr = int(value['kurs'])
-        _df = df_res(fnr=_fnr, start=start_datum.value, ende=ende_datum.value)
-
-        print(int(value['kurs']), _df.datum.min())
+        #print(int(value['kurs']), _df.datum.min())
 
         _min_datum = _df.datum.min().date().strftime('%Y-%m-%d')
         _max_datum = _df.datum.max().date().strftime('%Y-%m-%d')    
         _anzahl = _df.datum.drop_duplicates().count()    
         _title = f"Fahrt {_fnr} von {_min_datum} bis {_max_datum} Anzahl {_anzahl}"
+        print(_fnr, _min_datum, _max_datum, _anzahl)
         _chart = chart_func(_df, 'nr_name', 'an_minute', _title )
         #_chart.save(f'out/chart_{_fnr}.pdf')
         _chart.save(f'out/chart_{_fnr}.html')
@@ -542,6 +518,7 @@ def _(chart_func, df_fahrten_sel, df_res, ende_datum, start_datum):
 def _(mo):
     mo.md(r"""
     ## Einzeldurchlauf
+    - nur für einen Zeitraum von bis , hier müssen die Verläufe identisch sein
     """)
     return
 
