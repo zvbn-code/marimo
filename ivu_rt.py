@@ -148,23 +148,27 @@ def _(duck):
         Rausfiltern besonders hoher Abweichungen und Begrenzung des Zeitbereichs über Liste der verkehrenden Tage
         """
         df = duck.sql(f"""
-    select
-        l.datum,
-        l.kurs,
-        l.nr,
-        l.haltestelle_name,
-        -- Ersetzen der Zeichen wegen unterschiedlicher Codierung der Haltestellennamen
-        lpad(l.nr::TEXT, 2, '0') || ' ' || l.haltestelle_name.replace ('Ã¼', 'ü').replace ('Ã', 'ß').replace ('Ã¶', 'ö').replace ('Ã¤', 'ä').replace ('ß¤', 'ä') as nr_name,
-        l.abwab / 60 as ab_minute,
-        l.abwan / 60 as an_minute
-    from
-        rt_red l
-        join tbl_fahrtliste s on s.kurs = l.kurs
-        and l.datum in s.list_datum
-    where
-        l.kurs = {fnr}
-    order by datum, kurs, nr
-            """).df()
+        select
+            l.datum,
+            l.kurs,
+            l.nr,
+            l.haltestelle_name,
+            -- Ersetzen der Zeichen wegen unterschiedlicher Codierung der Haltestellennamen
+            lpad(l.nr::TEXT, 2, '0') || ' ' || l.haltestelle_name.replace ('Ã¼', 'ü').replace ('Ã', 'ß').replace ('Ã¶', 'ö').replace ('Ã¤', 'ä').replace ('ß¤', 'ä') as nr_name,
+            l.abwab / 60 as ab_minute,
+            l.abwan / 60 as an_minute
+        from
+            rt_red l
+            join tbl_fahrtliste s on s.kurs = l.kurs
+            and l.datum in s.list_datum
+        where
+            l.kurs = {fnr}
+            and abwab < 1800
+            and abwab > -120
+            and abwan < 1800
+            and abwan > -120
+        order by datum, kurs, nr
+        """).df()
         return df
 
     return (df_res_list,)
@@ -222,7 +226,7 @@ def _(duck, ende_datum, mo, rt_red, start_datum):
     _df = mo.sql(
         f"""
         -- erstellen einer temporären Tabelle mit der Liste der Fahrten und auswertbaren Tagen
-        create or replace table tbl_fahrtliste as
+        create or replace temporary table  tbl_fahrtliste as
         select
             * exclude (anz)
         from
@@ -242,7 +246,7 @@ def _(duck, ende_datum, mo, rt_red, start_datum):
                             kurs
                     ) as anz_erhoben,
                     list_datum,
-                    list_datum_sep,
+                    -- list_datum_sep,
                     -- list_string_agg(list_datum) as list_datum_str,
                     list_min(list_datum) as von,
                     list_max(list_datum) as bis,
@@ -255,7 +259,7 @@ def _(duck, ende_datum, mo, rt_red, start_datum):
                             kurs,
                             anz_hst,
                             count(*) as anz,
-                            STRING_AGG(datum.strftime ('%Y-%m-%d')::text, ',') as list_datum_sep,
+                            -- STRING_AGG(datum.strftime ('%Y-%m-%d')::text, ',') as list_datum_sep,
                             list(datum) as list_datum
                         FROM
                             (
@@ -289,35 +293,9 @@ def _(duck, ende_datum, mo, rt_red, start_datum):
         WHERE
             -- Rausfiltern der Fahrt die am öftestesten erhoben wurde
             anz = anz_erhoben
+            and anz >= 4
         order by
             kurs
-        """,
-        engine=duck
-    )
-    return
-
-
-@app.cell(hide_code=True)
-def _(duck, mo, rt_red, tbl_fahrtliste):
-    _df = mo.sql(
-        f"""
-        select
-            l.datum,
-            l.kurs,
-            l.nr,
-            l.haltestelle_name,
-            -- Ersetzen der Zeichen wegen unterschiedlicher Codierung der Haltestellennamen
-            lpad(l.nr::TEXT, 2, '0') || ' ' || l.haltestelle_name.replace ('Ã¼', 'ü').replace ('Ã', 'ß').replace ('Ã¶', 'ö').replace ('Ã¤', 'ä').replace ('ß¤', 'ä') as nr_name,
-            l.abwab / 60 as ab_minute,
-            l.abwan / 60 as an_minute
-        from
-            rt_red l
-            join tbl_fahrtliste s on s.kurs = l.kurs
-            and l.datum in s.list_datum
-        where
-            l.kurs = 1226002
-        order by datum, kurs, nr
-        -- limit 10000
         """,
         engine=duck
     )
@@ -330,56 +308,9 @@ def _(df_res_list):
     return
 
 
-@app.cell(hide_code=True)
-def _(duck, ende_datum, mo, rt_red, start_datum):
-    df_fahrtliste = mo.sql(
-        f"""
-        select
-            buendel,
-            linie,
-            kurs,
-            count(*) as anz_fahrten,
-            min(anz_hst) as min_anz_hst,
-            max(anz_hst) as max_anz_hst,
-            max(anz_hst) - min(anz_hst) diff_anz_hst,
-            min(datum) as von,
-            max(datum) as bis,
-            '<a href="chart_' || kurs::int || '.html">Link</a>' as link
-        from (select * from 
-            (
-                select
-                    datum,
-                    buendel,
-                    linie,
-                    kurs,
-                    count(*) as anz_hst,
-                    count(*) filter(abwan not null) as an_not_null,
-                    count(*) filter(abwab not null) as ab_not_null
-                from
-                    rt_red
-                where
-                    datum >= '{start_datum.value}'
-                    and datum <= '{ende_datum.value}'
-                group by all
-            )
-        where
-            -- Mindestanzahl der Abfahrten / Ankünfte mit Echtzeit
-            an_not_null > 2
-            and ab_not_null > 2) as foo
-
-
-            group by all
-        order by
-            linie,
-            kurs
-        """,
-        engine=duck
-    )
-    return
-
-
 @app.cell
 def _(df_res):
+    # Test der Funktion
     df_res(fnr=1226002, start='2025-11-12', ende='2025-11-12')
     return
 
@@ -395,34 +326,21 @@ def _(duck):
 
 
 @app.cell(hide_code=True)
-def _(df_fahrtliste2, duck, ende_datum, mo, rt_red, start_datum):
+def _(duck, mo, tbl_fahrtliste):
     _df = mo.sql(
         f"""
-        select distinct
-            r.linie,
-            r.kurs,
-            min(r.datum),
-            max(r.datum),
-            count(distinct datum) as anz, 
-            s.kurs as kurs_auswahl,
-            s.ges_erhoben
-        from
-            rt_red r
-            left join df_fahrtliste2 s on r.linie = s.linie and r.kurs = s.kurs
-            where 
-                      datum >= '{start_datum.value}'
-                    and datum <= '{ende_datum.value}'
-        GROUP BY all
-        order by r.linie, r.kurs
+        from tbl_fahrtliste
         """,
         engine=duck
     )
     return
 
 
-@app.cell
-def _(df_fahrten_sel):
-    df_fahrten_sel
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Erstellen der Liste gesamt und je Bündel
+    """)
     return
 
 
@@ -433,15 +351,28 @@ def _(df_fahrten_sel):
 
 
 @app.cell(hide_code=True)
-def _(duck, mo, rt_red, start_datum):
-    _df = mo.sql(
+def _(duck, mo, tbl_fahrtliste):
+    df_list_buendel = mo.sql(
         f"""
-        select * from rt_red 
-            where kurs = 6405426
-        and datum >= '{start_datum.value}'
+        select distinct
+            buendel
+        from
+            tbl_fahrtliste
+            where buendel not null
+        order by
+            buendel
         """,
         engine=duck
     )
+    return (df_list_buendel,)
+
+
+@app.cell
+def _(df_fahrten_sel, df_list_buendel):
+    for j, value in df_list_buendel.iterrows():
+        _buendel = value['buendel']
+        print(_buendel.replace(' ', '_').replace('ü', 'ue').lower())
+        df_fahrten_sel[['buendel','linie', 'kurs', 'von', 'bis', 'anz_erhoben', 'link']].query(f"buendel == '{_buendel}'").reset_index().style.format({"von": lambda t: t.strftime("%Y-%m-%d"), "bis": lambda t: t.strftime("%Y-%m-%d")}, precision=0).to_html(f"out/liste_{_buendel.replace(' ', '_').replace('ü', 'ue').lower()}.html", index=False, escape=False)
     return
 
 
@@ -465,40 +396,10 @@ def _(df_fahrten_sel):
     return
 
 
-@app.cell(hide_code=True)
-def _(duck, mo, rt_red, start_datum):
-    _df = mo.sql(
-        f"""
-        select *
-        from rt_red
-        where kurs = 1012078 
-        and datum >= '{start_datum.value}'
-        """,
-        engine=duck
-    )
-    return
-
-
-@app.cell
-def _(df_res, ende_datum, start_datum):
-    df_res(fnr=1012078 , start=start_datum.value, ende=ende_datum.value)
-    return
-
-
-@app.cell
-def _():
-    #for j, value in df_fahrten_sel[0:10].iterrows():
-    #    _fnr = int(value['kurs'])
-    #    _list_datum_str = value['list_datum']
-    #    print(_fnr, _list_datum_str)
-    #    _df = df_res_list(fnr=_fnr)
-    return
-
-
 @app.cell
 def _(chart_func, df_fahrten_sel, df_res_list):
-    for j, value in df_fahrten_sel[0:10000].iterrows():
-        _fnr = int(value['kurs'])
+    for _k, _value in df_fahrten_sel[0:10000].iterrows():
+        _fnr = int(_value['kurs'])
         _df = df_res_list(fnr=_fnr)
 
         #print(int(value['kurs']), _df.datum.min())
@@ -520,6 +421,12 @@ def _(mo):
     ## Einzeldurchlauf
     - nur für einen Zeitraum von bis , hier müssen die Verläufe identisch sein
     """)
+    return
+
+
+@app.cell
+def _(df_res, ende_datum, start_datum):
+    df_res(fnr=1670002 , start=start_datum.value, ende=ende_datum.value)
     return
 
 
