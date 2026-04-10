@@ -277,6 +277,11 @@ def _(duck, ende_datum, mo, rt_red, start_datum):
                                     datum >= '{start_datum.value}'
                                     and datum <= '{ende_datum.value}'
                                     -- and linie = 6440
+                                    and abwab < 1800
+                                    and abwab > -120
+                                    and abwan < 1800
+                                    and abwan > -120
+                      
                                 group by all
                                 order by
                                     kurs,
@@ -326,10 +331,10 @@ def _(duck):
 
 
 @app.cell(hide_code=True)
-def _(duck, mo, tbl_fahrtliste):
+def _(duck, mo, rt_red, start_datum):
     _df = mo.sql(
         f"""
-        from tbl_fahrtliste
+        from rt_red where kurs = 1012079 and datum >= '{start_datum.value}'
         """,
         engine=duck
     )
@@ -402,7 +407,7 @@ def _(chart_func, df_fahrten_sel, df_res_list):
         _fnr = int(_value['kurs'])
         _df = df_res_list(fnr=_fnr)
 
-        #print(int(value['kurs']), _df.datum.min())
+        print(int(_value['kurs']), _df.datum.min())
 
         _min_datum = _df.datum.min().date().strftime('%Y-%m-%d')
         _max_datum = _df.datum.max().date().strftime('%Y-%m-%d')    
@@ -426,7 +431,7 @@ def _(mo):
 
 @app.cell
 def _(df_res, ende_datum, start_datum):
-    df_res(fnr=1670002 , start=start_datum.value, ende=ende_datum.value)
+    df_res(fnr=6405426, start=start_datum.value, ende=ende_datum.value)
     return
 
 
