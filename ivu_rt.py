@@ -226,7 +226,7 @@ def _(duck, ende_datum, mo, rt_red, start_datum):
     _df = mo.sql(
         f"""
         -- erstellen einer temporären Tabelle mit der Liste der Fahrten und auswertbaren Tagen
-        create or replace temporary table  tbl_fahrtliste as
+        create or replace temporary table tbl_fahrtliste as
         select
             * exclude (anz)
         from
@@ -250,7 +250,7 @@ def _(duck, ende_datum, mo, rt_red, start_datum):
                     -- list_string_agg(list_datum) as list_datum_str,
                     list_min(list_datum) as von,
                     list_max(list_datum) as bis,
-                    '<a href="chart_' || kurs::int || '.html">Link</a>' as link
+                    '<a href="chart/chart_' || kurs::int || '.html">Link</a>' as link
                 from
                     (
                         select
@@ -270,18 +270,17 @@ def _(duck, ende_datum, mo, rt_red, start_datum):
                                     kurs,
                                     count(*) as anz_hst,
                                     count(*) filter(abwan not null) as an_not_null,
-                                    count(*) filter(abwab not null) as ab_not_null
+                                    count(*) filter(abwab not null) as ab_not_null,
                                 from
                                     rt_red
                                 where
                                     datum >= '{start_datum.value}'
                                     and datum <= '{ende_datum.value}'
                                     -- and linie = 6440
-                                    and abwab < 1800
-                                    and abwab > -120
-                                    and abwan < 1800
-                                    and abwan > -120
-                      
+                                    -- and abwab < 1800
+                                    -- and abwab > -120
+                                    -- and abwan < 1800
+                                    -- and abwan > -120
                                 group by all
                                 order by
                                     kurs,
@@ -290,6 +289,8 @@ def _(duck, ende_datum, mo, rt_red, start_datum):
                         where
                             ab_not_null > 2
                             and an_not_null > 2
+                            and (ab_not_null / anz_hst) > 0.75
+                            and (an_not_null / anz_hst) > 0.75
                         group by all
                     ) as foo2
                 order by
@@ -377,7 +378,7 @@ def _(df_fahrten_sel, df_list_buendel):
     for j, value in df_list_buendel.iterrows():
         _buendel = value['buendel']
         print(_buendel.replace(' ', '_').replace('ü', 'ue').lower())
-        df_fahrten_sel[['buendel','linie', 'kurs', 'von', 'bis', 'anz_erhoben', 'link']].query(f"buendel == '{_buendel}'").reset_index().style.format({"von": lambda t: t.strftime("%Y-%m-%d"), "bis": lambda t: t.strftime("%Y-%m-%d")}, precision=0).to_html(f"out/liste_{_buendel.replace(' ', '_').replace('ü', 'ue').lower()}.html", index=False, escape=False)
+        df_fahrten_sel[['buendel','linie', 'kurs', 'von', 'bis', 'anz_erhoben', 'link']].query(f"buendel == '{_buendel}'").style.format({"von": lambda t: t.strftime("%Y-%m-%d"), "bis": lambda t: t.strftime("%Y-%m-%d")}, precision=0).to_html(f"out/liste_{_buendel.replace(' ', '_').replace('ü', 'ue').lower()}.html", index=False, escape=False)
     return
 
 
@@ -403,11 +404,11 @@ def _(df_fahrten_sel):
 
 @app.cell
 def _(chart_func, df_fahrten_sel, df_res_list):
-    for _k, _value in df_fahrten_sel[0:10000].iterrows():
+    for _k, _value in df_fahrten_sel[0:30000].iterrows():
         _fnr = int(_value['kurs'])
         _df = df_res_list(fnr=_fnr)
 
-        print(int(_value['kurs']), _df.datum.min())
+        #print(int(_value['kurs']), _df.datum.min())
 
         _min_datum = _df.datum.min().date().strftime('%Y-%m-%d')
         _max_datum = _df.datum.max().date().strftime('%Y-%m-%d')    
@@ -415,8 +416,8 @@ def _(chart_func, df_fahrten_sel, df_res_list):
         _title = f"Fahrt {_fnr} von {_min_datum} bis {_max_datum} Anzahl {_anzahl}"
         print(_fnr, _min_datum, _max_datum, _anzahl)
         _chart = chart_func(_df, 'nr_name', 'an_minute', _title )
-        #_chart.save(f'out/chart_{_fnr}.pdf')
-        _chart.save(f'out/chart_{_fnr}.html')
+        #_chart.save(f'out/chart/chart_{_fnr}.pdf')
+        _chart.save(f'out/chart/chart_{_fnr}.html')
     return
 
 
