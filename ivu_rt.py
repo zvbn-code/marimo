@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.22.3"
+__generated_with = "0.23.1"
 app = marimo.App(width="medium", sql_output="pandas")
 
 
@@ -19,7 +19,7 @@ def _():
     import pandas as pd
     import altair as alt
 
-    return alt, duckdb, mo
+    return alt, duckdb, mo, pd
 
 
 @app.cell
@@ -151,8 +151,12 @@ def _(duck):
         select
             l.datum,
             l.kurs,
+            l.linie,
+            l.buendel,
             l.nr,
             l.haltestelle_name,
+            l.sollabfahrt,
+            l.sollab_ts,
             -- Ersetzen der Zeichen wegen unterschiedlicher Codierung der Haltestellennamen
             lpad(l.nr::TEXT, 2, '0') || ' ' || l.haltestelle_name.replace ('Ã¼', 'ü').replace ('Ã', 'ß').replace ('Ã¶', 'ö').replace ('Ã¤', 'ä').replace ('ß¤', 'ä') as nr_name,
             l.abwab / 60 as ab_minute,
@@ -315,13 +319,6 @@ def _(df_res_list):
 
 
 @app.cell
-def _(df_res):
-    # Test der Funktion
-    df_res(fnr=1226002, start='2025-11-12', ende='2025-11-12')
-    return
-
-
-@app.cell
 def _(duck):
     # Filterung auf Fahrten 
     ## - mit einer gewissen Anzahl von Fahrten und 
@@ -391,6 +388,22 @@ def _(mo):
 
 
 @app.cell
+def _(df_res_list, pd):
+    # Ermitteln der Median Werte 
+    _arr = []
+    _fnr = 1226005
+    _median_erste = df_res_list(fnr=_fnr).query("nr == 1")['ab_minute'].median()
+    _vorletzte_hst = df_res_list(fnr=1226002).nr.max()-1
+    _median_vorletzte = df_res_list(fnr=_fnr).query(f"nr == {_vorletzte_hst}")['an_minute'].median()
+    _buendel = df_res_list(fnr=_fnr)['buendel'].drop_duplicates()[0]
+    _linie = df_res_list(fnr=_fnr)['linie'].drop_duplicates()[0]
+    _arr.append([_fnr,_buendel,_linie,_median_erste, _median_vorletzte])
+    pd.DataFrame(_arr, columns=['fnr','buendel','linie','median_erste', 'median_vorletzte'])
+    #df_res_list(fnr=1226002)
+    return
+
+
+@app.cell
 def _(df_fahrten_sel):
     df_fahrten_sel.to_excel('df_fahrten_sel.xlsx')
     return
@@ -403,8 +416,10 @@ def _(df_fahrten_sel):
 
 
 @app.cell
-def _(chart_func, df_fahrten_sel, df_res_list):
-    for _k, _value in df_fahrten_sel[0:30000].iterrows():
+def _(chart_func, df_fahrten_sel, df_res_list, pd):
+    _arr = []
+
+    for _k, _value in df_fahrten_sel[0:10000].iterrows():
         _fnr = int(_value['kurs'])
         _df = df_res_list(fnr=_fnr)
 
@@ -414,10 +429,30 @@ def _(chart_func, df_fahrten_sel, df_res_list):
         _max_datum = _df.datum.max().date().strftime('%Y-%m-%d')    
         _anzahl = _df.datum.drop_duplicates().count()    
         _title = f"Fahrt {_fnr} von {_min_datum} bis {_max_datum} Anzahl {_anzahl}"
-        print(_fnr, _min_datum, _max_datum, _anzahl)
+        #print(_fnr, _min_datum, _max_datum, _anzahl)
         _chart = chart_func(_df, 'nr_name', 'an_minute', _title )
         #_chart.save(f'out/chart/chart_{_fnr}.pdf')
         _chart.save(f'out/chart/chart_{_fnr}.html')
+
+        # Ermitteln der Median Werte je Fahrt erste ab und vorletzte an
+
+        _median_erste = _df.query("nr == 1")['ab_minute'].median()
+        _sollab = _df.query("nr == 1")['sollab_ts'].min()
+        vorletzte_hst = _df.nr.max()-1
+        _median_vorletzte = _df.query(f"nr == {vorletzte_hst}")['an_minute'].median()
+        _buendel = df_res_list(fnr=_fnr)['buendel'].drop_duplicates()[0]
+        _linie = df_res_list(fnr=_fnr)['linie'].drop_duplicates()[0]
+        _arr.append([_fnr,_buendel,_linie,_median_erste, _median_vorletzte, _min_datum, _max_datum, _anzahl, _sollab, _sollab.hour, _sollab.minute])
+
+        print(_fnr, _min_datum, _max_datum, _anzahl, _sollab.hour, _sollab.minute)
+
+    df_median = pd.DataFrame(_arr, columns=['fnr','buendel','linie','median_erste', 'median_vorletzte', 'min_datum', 'max_datum', 'anzahl', 'sollab', 'stunde', 'minute'])
+    return (df_median,)
+
+
+@app.cell
+def _(df_median):
+    df_median.sort_values('median_vorletzte', ascending=False).style.format(precision=1).to_excel('df_median.xlsx', index=False)
     return
 
 
