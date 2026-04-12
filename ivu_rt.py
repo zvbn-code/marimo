@@ -18,9 +18,9 @@ def _():
     import duckdb
     import pandas as pd
     import altair as alt
-    from openpyxl.styles import NamedStyle
+    from openpyxl.styles import NamedStyle, Font, Border, Side, Alignment, Protection, PatternFill
 
-    return alt, duckdb, mo, pd
+    return Font, alt, duckdb, mo, pd
 
 
 @app.cell
@@ -389,17 +389,24 @@ def _(mo):
 
 
 @app.cell
+def _(df_res_list):
+    df_res_list(fnr=1226002)
+    return
+
+
+@app.cell
 def _(df_res_list, pd):
     # Ermitteln der Median Werte 
     _arr = []
     _fnr = 1226005
     _median_erste = df_res_list(fnr=_fnr).query("nr == 1")['ab_minute'].median()
-    _vorletzte_hst = df_res_list(fnr=1226002).nr.max()-1
+    _vorletzte_hst = df_res_list(fnr=_fnr).nr.max()-1
     _median_vorletzte = df_res_list(fnr=_fnr).query(f"nr == {_vorletzte_hst}")['an_minute'].median()
     _buendel = df_res_list(fnr=_fnr)['buendel'].drop_duplicates()[0]
     _linie = df_res_list(fnr=_fnr)['linie'].drop_duplicates()[0]
-    _arr.append([_fnr,_buendel,_linie,_median_erste, _median_vorletzte])
-    pd.DataFrame(_arr, columns=['fnr','buendel','linie','median_erste', 'median_vorletzte'])
+    _hst_ab = df_res_list(fnr=_fnr).query("nr == 1")['haltestelle_name'].min()
+    _arr.append([_fnr,_buendel,_linie,_median_erste, _median_vorletzte, _hst_ab])
+    pd.DataFrame(_arr, columns=['fnr','buendel','linie','median_erste', 'median_vorletzte', 'hst_ab'])
     #df_res_list(fnr=1226002)
     return
 
@@ -420,7 +427,7 @@ def _(df_fahrten_sel):
 def _(chart_func, df_fahrten_sel, df_res_list, pd):
     _arr = []
 
-    for _k, _value in df_fahrten_sel[0:10].iterrows():
+    for _k, _value in df_fahrten_sel[0:10000].iterrows():
         _fnr = int(_value['kurs'])
         _df = df_res_list(fnr=_fnr)
 
@@ -441,19 +448,28 @@ def _(chart_func, df_fahrten_sel, df_res_list, pd):
         _sollab = _df.query("nr == 1")['sollab_ts'].min()
         vorletzte_hst = _df.nr.max()-1
         _median_vorletzte = _df.query(f"nr == {vorletzte_hst}")['an_minute'].median()
-        _buendel = df_res_list(fnr=_fnr)['buendel'].drop_duplicates()[0]
-        _linie = df_res_list(fnr=_fnr)['linie'].drop_duplicates()[0]
-        _arr.append([_fnr,_buendel,_linie,_median_erste, _median_vorletzte, _min_datum, _max_datum, _anzahl, _sollab, _sollab.hour, _sollab.minute])
+        _buendel = _df['buendel'].drop_duplicates()[0]
+        _linie = _df['linie'].drop_duplicates()[0]
+        _hst_ab = _df.query("nr == 1")['haltestelle_name'].min()
+        _arr.append([_fnr,_buendel,_linie,_median_erste, _median_vorletzte, _min_datum, _max_datum, _anzahl, _sollab, _sollab.hour, _sollab.minute, _hst_ab])
 
         print(_fnr, _min_datum, _max_datum, _anzahl, _sollab.hour, _sollab.minute)
 
-    df_median = pd.DataFrame(_arr, columns=['fnr','buendel','linie','median_erste', 'median_vorletzte', 'min_datum', 'max_datum', 'anzahl', 'sollab', 'stunde', 'minute'])
+    df_median = pd.DataFrame(_arr, columns=['fnr','buendel','linie','median_erste', 'median_vorletzte', 'min_datum', 'max_datum', 'anzahl', 'sollab', 'stunde', 'minute', 'Hst ab'])
     return (df_median,)
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Ausgabe Medianberichte
+    """)
+    return
+
+
 @app.cell
-def _(df_median, ende_datum, pd, start_datum):
-    prefix = f"reports/median_[{start_datum.value} - {ende_datum.value}]"
+def _(Font, df_median, ende_datum, pd, start_datum):
+    prefix = f"reports/median_{start_datum.value} - {ende_datum.value}"
 
     with pd.ExcelWriter(f'{prefix}.xlsx', engine='openpyxl') as writer:    
         df_median.sort_values(['buendel', 'linie', 'fnr'], ascending=False).style.format(precision=1).to_excel(writer, sheet_name='median', index=False)
@@ -461,11 +477,16 @@ def _(df_median, ende_datum, pd, start_datum):
         ws = writer.sheets['median']
         ws.auto_filter.ref = ws.dimensions
         ws.freeze_panes = 'A2'
+        ws.column_dimensions['F'].width = 15 # Datum
+        ws.column_dimensions['G'].width = 15 # Datum
+        ws.column_dimensions['L'].width = 25 # Anzahl
+    
 
         for row in ws.iter_rows(min_row=2, min_col=4, max_col=5):
             for _cell in row:
                 _cell.number_format = "0.00" # Display to 2dp
-        
+                if type(_cell.value) in [int, float] and (_cell.value > 5  or _cell.value < -1):
+                    _cell.font = Font(color="00FF0000")
 
     df_median.to_parquet(f'{prefix}.parquet')
     return
