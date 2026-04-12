@@ -18,6 +18,7 @@ def _():
     import duckdb
     import pandas as pd
     import altair as alt
+    from openpyxl.styles import NamedStyle
 
     return alt, duckdb, mo, pd
 
@@ -419,7 +420,7 @@ def _(df_fahrten_sel):
 def _(chart_func, df_fahrten_sel, df_res_list, pd):
     _arr = []
 
-    for _k, _value in df_fahrten_sel[0:10000].iterrows():
+    for _k, _value in df_fahrten_sel[0:10].iterrows():
         _fnr = int(_value['kurs'])
         _df = df_res_list(fnr=_fnr)
 
@@ -451,8 +452,22 @@ def _(chart_func, df_fahrten_sel, df_res_list, pd):
 
 
 @app.cell
-def _(df_median):
-    df_median.sort_values('median_vorletzte', ascending=False).style.format(precision=1).to_excel('df_median.xlsx', index=False)
+def _(df_median, ende_datum, pd, start_datum):
+    prefix = f"reports/median_[{start_datum.value} - {ende_datum.value}]"
+
+    with pd.ExcelWriter(f'{prefix}.xlsx', engine='openpyxl') as writer:    
+        df_median.sort_values(['buendel', 'linie', 'fnr'], ascending=False).style.format(precision=1).to_excel(writer, sheet_name='median', index=False)
+        workbook  = writer.book
+        ws = writer.sheets['median']
+        ws.auto_filter.ref = ws.dimensions
+        ws.freeze_panes = 'A2'
+
+        for row in ws.iter_rows(min_row=2, min_col=4, max_col=5):
+            for _cell in row:
+                _cell.number_format = "0.00" # Display to 2dp
+        
+
+    df_median.to_parquet(f'{prefix}.parquet')
     return
 
 
