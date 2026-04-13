@@ -1,8 +1,10 @@
 # marimo
 Test mit marimo anhand 
-- der HIS Datenbank
-- Daten aus dem IVU RBL
+- der HIS Datenbank notebook.py
+- Daten aus dem IVU RBL ivu_rt.py
     - Datenbereinigung 
     - Medianbestimmung
     - Boxplot
-- OSM Auswertung über DuckDB
+    - übergreifenden Statistiken
+- OSM Auswertung über DuckDB osm.py
+    - read_osm DuckDB
