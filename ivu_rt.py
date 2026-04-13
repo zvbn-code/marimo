@@ -431,19 +431,11 @@ def _(chart_func, df_fahrten_sel, df_res_list, pd):
         _fnr = int(_value['kurs'])
         _df = df_res_list(fnr=_fnr)
 
-        #print(int(_value['kurs']), _df.datum.min())
-
         _min_datum = _df.datum.min().date().strftime('%Y-%m-%d')
         _max_datum = _df.datum.max().date().strftime('%Y-%m-%d')    
         _anzahl = _df.datum.drop_duplicates().count()    
-        _title = f"Fahrt {_fnr} von {_min_datum} bis {_max_datum} Anzahl {_anzahl}"
-        #print(_fnr, _min_datum, _max_datum, _anzahl)
-        _chart = chart_func(_df, 'nr_name', 'an_minute', _title )
-        #_chart.save(f'out/chart/chart_{_fnr}.pdf')
-        _chart.save(f'out/chart/chart_{_fnr}.html')
-
+ 
         # Ermitteln der Median Werte je Fahrt erste ab und vorletzte an
-
         _median_erste = _df.query("nr == 1")['ab_minute'].median()
         _sollab = _df.query("nr == 1")['sollab_ts'].min()
         vorletzte_hst = _df.nr.max()-1
@@ -454,6 +446,12 @@ def _(chart_func, df_fahrten_sel, df_res_list, pd):
         _arr.append([_fnr,_buendel,_linie,_median_erste, _median_vorletzte, _min_datum, _max_datum, _anzahl, _sollab, _sollab.hour, _sollab.minute, _hst_ab])
 
         print(_fnr, _min_datum, _max_datum, _anzahl, _sollab.hour, _sollab.minute)
+
+        #Erstellen des Charts
+        _title = f"Fahrt {_fnr} von {_min_datum} bis {_max_datum} Anzahl {_anzahl} Start {_hst_ab} {_sollab.hour}:{str(_sollab.minute).zfill(2)}"
+        _chart = chart_func(_df, 'nr_name', 'an_minute', _title )
+        #_chart.save(f'out/chart/chart_{_fnr}.pdf')
+        _chart.save(f'out/chart/chart_{_fnr}.html')
 
     df_median = pd.DataFrame(_arr, columns=['fnr','buendel','linie','median_erste', 'median_vorletzte', 'min_datum', 'max_datum', 'anzahl', 'sollab', 'stunde', 'minute', 'Hst ab'])
     return (df_median,)
@@ -480,7 +478,7 @@ def _(Font, df_median, ende_datum, pd, start_datum):
         ws.column_dimensions['F'].width = 15 # Datum
         ws.column_dimensions['G'].width = 15 # Datum
         ws.column_dimensions['L'].width = 25 # Anzahl
-    
+
 
         for row in ws.iter_rows(min_row=2, min_col=4, max_col=5):
             for _cell in row:
