@@ -18,9 +18,10 @@ def _():
     import duckdb
     import pandas as pd
     import altair as alt
+    import datetime as dt 
     from openpyxl.styles import NamedStyle, Font, Border, Side, Alignment, Protection, PatternFill
 
-    return Font, alt, duckdb, mo, pd
+    return Font, alt, dt, duckdb, mo, pd
 
 
 @app.cell
@@ -120,6 +121,7 @@ def _(duck):
         kurs,
         nr,
         haltestelle_name,
+        sollab_ts,
         -- Ersetzen der Zeichen wegen unterschiedlicher Codierung der Haltestellennamen
         lpad(nr::TEXT, 2, '0') || ' ' || haltestelle_name.replace ('Ã¼', 'ü').replace ('Ã', 'ß').replace ('Ã¶', 'ö').replace('Ã¤', 'ä').replace('ß¤', 'ä') as nr_name,
         abwab / 60 as ab_minute,
@@ -181,10 +183,10 @@ def _(duck):
 
 @app.cell
 def _(alt):
-    def chart_func(df_in, x,y, title):
+    def chart_func(df_in, x,y, title, suptitle):
         chart = alt.Chart(
             df_in, 
-            title=title, 
+            title=alt.TitleParams(text=title, anchor='start', fontSize=14, subtitle=suptitle, subtitleFontSize=12), 
             width='container', 
             height=500
         ).mark_boxplot(
@@ -208,6 +210,12 @@ def _(alt):
 
 
     return (chart_func,)
+
+
+@app.cell
+def _(chart_intern):
+    chart_intern
+    return
 
 
 @app.cell(hide_code=True)
@@ -333,7 +341,11 @@ def _(duck):
 def _(duck, mo, rt_red, start_datum):
     _df = mo.sql(
         f"""
-        from rt_red where kurs = 1012079 and datum >= '{start_datum.value}'
+        select datum, kurs, max(abwab) 
+            from rt_red 
+            where linie = 6225 and datum >= '{start_datum.value}' 
+            group by all 
+            order by kurs, datum 
         """,
         engine=duck
     )
@@ -424,20 +436,21 @@ def _(df_fahrten_sel):
 
 
 @app.cell
-def _(chart_func, df_fahrten_sel, df_res_list, pd):
+def _(chart_func, df_fahrten_sel, df_res_list, dt, pd):
     _arr = []
 
-    for _k, _value in df_fahrten_sel[0:10000].iterrows():
+    for _k, _value in df_fahrten_sel[0:4].iterrows():
         _fnr = int(_value['kurs'])
         _df = df_res_list(fnr=_fnr)
 
         _min_datum = _df.datum.min().date().strftime('%Y-%m-%d')
         _max_datum = _df.datum.max().date().strftime('%Y-%m-%d')    
         _anzahl = _df.datum.drop_duplicates().count()    
- 
+
         # Ermitteln der Median Werte je Fahrt erste ab und vorletzte an
         _median_erste = _df.query("nr == 1")['ab_minute'].median()
         _sollab = _df.query("nr == 1")['sollab_ts'].min()
+        _list_datum = _df['datum'].drop_duplicates().sort_values().tolist()
         vorletzte_hst = _df.nr.max()-1
         _median_vorletzte = _df.query(f"nr == {vorletzte_hst}")['an_minute'].median()
         _buendel = _df['buendel'].drop_duplicates()[0]
@@ -447,11 +460,21 @@ def _(chart_func, df_fahrten_sel, df_res_list, pd):
 
         print(_fnr, _min_datum, _max_datum, _anzahl, _sollab.hour, _sollab.minute)
 
-        #Erstellen des Charts
+        #Erstellen des Charttitels und Untertitels mit den wichtigsten Informationen
         _title = f"Fahrt {_fnr} von {_min_datum} bis {_max_datum} Anzahl {_anzahl} Start {_hst_ab} {_sollab.hour}:{str(_sollab.minute).zfill(2)}"
-        _chart = chart_func(_df, 'nr_name', 'an_minute', _title )
+        _erstellt = dt.datetime.now().strftime('%Y-%m-%d %H:%M')
+        _list =_df.datum.drop_duplicates().dt.strftime('%Y-%m-%d').sort_values().tolist()
+        _len_list = len(_list)
+        _str_list = ', '.join(_list[0:5])
+        if _len_list > 5:
+            _str_list += f", ... ({_len_list -5} weitere Tage)"
+    
+        _chart = chart_func(df_in=_df, x='nr_name', y='an_minute', title=_title, suptitle = f"Erstellt: {_erstellt} Erhobene Tage {_str_list}")
         #_chart.save(f'out/chart/chart_{_fnr}.pdf')
         _chart.save(f'out/chart/chart_{_fnr}.html')
+        print(_list_datum)
+
+
 
     df_median = pd.DataFrame(_arr, columns=['fnr','buendel','linie','median_erste', 'median_vorletzte', 'min_datum', 'max_datum', 'anzahl', 'sollab', 'stunde', 'minute', 'Hst ab'])
     return (df_median,)
@@ -501,20 +524,36 @@ def _(mo):
 
 @app.cell
 def _(df_res, ende_datum, start_datum):
-    df_res(fnr=6405426, start=start_datum.value, ende=ende_datum.value)
+    _list =df_res(fnr=6225080, start=start_datum.value, ende=ende_datum.value).datum.drop_duplicates().dt.strftime('%Y-%m-%d').sort_values().tolist()
+    _str_list = ', '.join(_list)
+    print(_str_list)
     return
 
 
 @app.cell
-def _(chart_func, df_res, ende_datum, start_datum):
-    _fnr = 1670002
+def _(chart_func, df_res, dt, ende_datum, start_datum):
+    _fnr = 6225080
     _df = df_res(fnr=_fnr, start=start_datum.value, ende=ende_datum.value)
-    min_datum = _df.datum.min().date().strftime('%Y-%m-%d')
-    max_datum = _df.datum.max().date().strftime('%Y-%m-%d')    
-    anzahl = _df.datum.drop_duplicates().count() 
-    title = f"Fahrt {_fnr} von {min_datum} bis {max_datum} Anzahl {anzahl}"
+    _min_datum = _df.datum.min().date().strftime('%Y-%m-%d')
+    _max_datum = _df.datum.max().date().strftime('%Y-%m-%d')    
+    _anzahl = _df.datum.drop_duplicates().count() 
 
-    _chart = chart_func(_df, 'nr_name', 'an_minute', title)
+    # Ermitteln der Median Werte je Fahrt erste ab und vorletzte an
+
+    _sollab = _df.query("nr == 1")['sollab_ts'].min()
+    _list_datum = _df['datum'].drop_duplicates().sort_values().tolist()
+    _hst_ab = _df.query("nr == 1")['haltestelle_name'].min()
+
+    #Erstellen des Charttitels und Untertitels mit den wichtigsten Informationen
+    _title = f"Fahrt {_fnr} von {_min_datum} bis {_max_datum} Anzahl {_anzahl} Start {_hst_ab} {_sollab.hour}:{str(_sollab.minute).zfill(2)}"
+    _erstellt = dt.datetime.now().strftime('%Y-%m-%d %H:%M')
+    _list =_df.datum.drop_duplicates().dt.strftime('%Y-%m-%d').sort_values().tolist()
+    _len_list = len(_list)
+    _str_list = ', '.join(_list[0:5])
+    if _len_list > 5:
+        _str_list += f", ... ({_len_list -5} weitere Tage)"
+
+    _chart = chart_func(df_in=_df, x='nr_name', y='an_minute', title=_title, suptitle = f"Erstellt: {_erstellt} Erhobene Tage {_str_list}")
     _chart
     _chart.save(f'out/chart_{_fnr}.pdf')
     _chart.save(f'out/chart_{_fnr}.html')
