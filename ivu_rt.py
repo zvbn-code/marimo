@@ -119,6 +119,8 @@ def _(duck):
         select
         datum,
         kurs,
+        mod(kurs, 2) as ri,
+        linie,
         nr,
         haltestelle_name,
         sollab_ts,
@@ -154,6 +156,7 @@ def _(duck):
         select
             l.datum,
             l.kurs,
+            mod(l.kurs, 2) as ri,
             l.linie,
             l.buendel,
             l.nr,
@@ -249,6 +252,7 @@ def _(duck, ende_datum, mo, rt_red, start_datum):
                     linie,
                     anz_hst,
                     kurs,
+                    mod(kurs,2) as ri,
                     anz,
                     sum(anz) over (
                         partition by
@@ -323,7 +327,7 @@ def _(duck, ende_datum, mo, rt_red, start_datum):
 
 @app.cell
 def _(df_res_list):
-    df_res_list(fnr=1226002)
+    df_res_list(fnr=1226001)
     return
 
 
@@ -345,7 +349,7 @@ def _(duck, mo, rt_red, start_datum):
             from rt_red 
             where linie = 6225 and datum >= '{start_datum.value}' 
             group by all 
-            order by kurs, datum 
+            order by kurs, datum
         """,
         engine=duck
     )
@@ -362,7 +366,7 @@ def _(mo):
 
 @app.cell
 def _(df_fahrten_sel):
-    df_fahrten_sel[['buendel','linie', 'kurs', 'von', 'bis', 'anz_erhoben', 'link']].style.format({"von": lambda t: t.strftime("%Y-%m-%d"), "bis": lambda t: t.strftime("%Y-%m-%d")}, precision=0).to_html('out/liste.html', index=False, escape=False)
+    df_fahrten_sel[['buendel','linie', 'kurs','ri' ,'von', 'bis', 'anz_erhoben', 'link']].style.format({"von": lambda t: t.strftime("%Y-%m-%d"), "bis": lambda t: t.strftime("%Y-%m-%d")}, precision=0).to_html('out/liste.html', index=False, escape=False)
     return
 
 
@@ -411,14 +415,16 @@ def _(df_res_list, pd):
     # Ermitteln der Median Werte 
     _arr = []
     _fnr = 1226005
-    _median_erste = df_res_list(fnr=_fnr).query("nr == 1")['ab_minute'].median()
-    _vorletzte_hst = df_res_list(fnr=_fnr).nr.max()-1
-    _median_vorletzte = df_res_list(fnr=_fnr).query(f"nr == {_vorletzte_hst}")['an_minute'].median()
-    _buendel = df_res_list(fnr=_fnr)['buendel'].drop_duplicates()[0]
-    _linie = df_res_list(fnr=_fnr)['linie'].drop_duplicates()[0]
-    _hst_ab = df_res_list(fnr=_fnr).query("nr == 1")['haltestelle_name'].min()
-    _arr.append([_fnr,_buendel,_linie,_median_erste, _median_vorletzte, _hst_ab])
-    pd.DataFrame(_arr, columns=['fnr','buendel','linie','median_erste', 'median_vorletzte', 'hst_ab'])
+    _df = df_res_list(fnr=_fnr)
+    _median_erste = _df.query("nr == 1")['ab_minute'].median()
+    _vorletzte_hst = _df.nr.max()-1
+    _median_vorletzte = _df.query(f"nr == {_vorletzte_hst}")['an_minute'].median()
+    _buendel = _df['buendel'].drop_duplicates()[0]
+    _ri = _df['ri'].drop_duplicates()[0]
+    _linie = _df['linie'].drop_duplicates()[0]
+    _hst_ab = _df.query("nr == 1")['haltestelle_name'].min()
+    _arr.append([_fnr,_buendel,_linie,_median_erste, _median_vorletzte, _hst_ab, _ri])
+    pd.DataFrame(_arr, columns=['fnr','buendel','linie','median_erste', 'median_vorletzte', 'hst_ab', 'ri'])
     #df_res_list(fnr=1226002)
     return
 
@@ -455,8 +461,9 @@ def _(chart_func, df_fahrten_sel, df_res_list, dt, pd):
         _median_vorletzte = _df.query(f"nr == {vorletzte_hst}")['an_minute'].median()
         _buendel = _df['buendel'].drop_duplicates()[0]
         _linie = _df['linie'].drop_duplicates()[0]
+        _ri = _df['ri'].drop_duplicates()[0]
         _hst_ab = _df.query("nr == 1")['haltestelle_name'].min()
-        _arr.append([_fnr,_buendel,_linie,_median_erste, _median_vorletzte, _min_datum, _max_datum, _anzahl, _sollab, _sollab.hour, _sollab.minute, _hst_ab])
+        _arr.append([_fnr,_buendel,_linie,_median_erste, _median_vorletzte, _min_datum, _max_datum, _anzahl, _sollab, _sollab.hour, _sollab.minute, _hst_ab, _ri])
 
         print(_fnr, _min_datum, _max_datum, _anzahl, _sollab.hour, _sollab.minute)
 
@@ -468,7 +475,7 @@ def _(chart_func, df_fahrten_sel, df_res_list, dt, pd):
         _str_list = ', '.join(_list[0:5])
         if _len_list > 5:
             _str_list += f", ... ({_len_list -5} weitere Tage)"
-    
+
         _chart = chart_func(df_in=_df, x='nr_name', y='an_minute', title=_title, suptitle = f"Erstellt: {_erstellt} Erhobene Tage {_str_list}")
         #_chart.save(f'out/chart/chart_{_fnr}.pdf')
         _chart.save(f'out/chart/chart_{_fnr}.html')
@@ -476,7 +483,7 @@ def _(chart_func, df_fahrten_sel, df_res_list, dt, pd):
 
 
 
-    df_median = pd.DataFrame(_arr, columns=['fnr','buendel','linie','median_erste', 'median_vorletzte', 'min_datum', 'max_datum', 'anzahl', 'sollab', 'stunde', 'minute', 'Hst ab'])
+    df_median = pd.DataFrame(_arr, columns=['fnr','buendel','linie','median_erste', 'median_vorletzte', 'min_datum', 'max_datum', 'anzahl', 'sollab', 'stunde', 'minute', 'Hst ab', 'ri'])
     return (df_median,)
 
 
