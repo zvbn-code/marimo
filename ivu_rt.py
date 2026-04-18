@@ -445,7 +445,7 @@ def _(df_fahrten_sel):
 def _(chart_func, df_fahrten_sel, df_res_list, dt, pd):
     _arr = []
 
-    for _k, _value in df_fahrten_sel[0:4].iterrows():
+    for _k, _value in df_fahrten_sel[0:40000].iterrows():
         _fnr = int(_value['kurs'])
         _df = df_res_list(fnr=_fnr)
 
@@ -479,9 +479,7 @@ def _(chart_func, df_fahrten_sel, df_res_list, dt, pd):
         _chart = chart_func(df_in=_df, x='nr_name', y='an_minute', title=_title, suptitle = f"Erstellt: {_erstellt} Erhobene Tage {_str_list}")
         #_chart.save(f'out/chart/chart_{_fnr}.pdf')
         _chart.save(f'out/chart/chart_{_fnr}.html')
-        print(_list_datum)
-
-
+        #print(_list_datum)
 
     df_median = pd.DataFrame(_arr, columns=['fnr','buendel','linie','median_erste', 'median_vorletzte', 'min_datum', 'max_datum', 'anzahl', 'sollab', 'stunde', 'minute', 'Hst ab', 'ri'])
     return (df_median,)
@@ -517,6 +515,50 @@ def _(Font, df_median, ende_datum, pd, start_datum):
                     _cell.font = Font(color="00FF0000")
 
     df_median.to_parquet(f'{prefix}.parquet')
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Grafische Darstellung der Ergebnisse
+    - Auswertung der Medianwerte nach Uhrzeit
+    """)
+    return
+
+
+@app.cell
+def _(df_median, mo):
+    dropdown = mo.ui.dropdown.from_series(df_median["linie"])
+    return (dropdown,)
+
+
+@app.cell
+def _(dropdown):
+    dropdown
+    return
+
+
+@app.cell(hide_code=True)
+def _(alt, df_median, dropdown):
+    _linie = 6440
+    _df = df_median[df_median['sollab'].notnull()].query(f"linie == '{dropdown.value}'").sort_values(['ri', 'stunde', 'fnr']).reset_index()
+
+    _chart = alt.Chart(_df[['fnr','stunde','minute' ,'median_vorletzte', 'ri']],  title=alt.TitleParams(text=f"Fahrtzeiten Ankunft vorletzte Haltestelle Linie {dropdown.value}", anchor='start', fontSize=14)).mark_circle(size=60).encode(
+        alt.X("fnr:N"),
+        alt.Y("stunde:N"),
+        alt.Color("median_vorletzte:Q", scale=alt.Scale(scheme='redblue', reverse=True, domainMid=5)),
+        tooltip=['fnr', 'stunde','minute' ,'median_vorletzte', 'ri'],
+   
+
+    )
+    chart_agg = _chart
+    return (chart_agg,)
+
+
+@app.cell
+def _(chart_agg):
+    chart_agg
     return
 
 
