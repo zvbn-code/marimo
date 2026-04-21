@@ -56,18 +56,55 @@ def _(duck, mo, rt_red):
 
 
 @app.cell(hide_code=True)
-def _(duck, mo, rt_red):
+def _(mo):
+    mo.md(r"""
+    ## Erstellen einer Kalenderdatei
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(duck, mo):
+    _df = mo.sql(
+        f"""
+        create or replace table cal as
+        select
+            *
+        from
+            "https://daten.zvbn.de/all_tg.csv"
+        """,
+        engine=duck
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Auswertung der erhobenen Fahrten in dem Zeitraum
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(cal, duck, ende_datum, mo, rt_red, start_datum):
     _df = mo.sql(
         f"""
         select
+            cal.datum.strftime ('%Y-%m-%d') as datum,
             count(*) as anzahl_zeilen,
-            count(*) filter (abwan not null) an_zeilen_ohne_null, 
+            count(*) filter(abwan not null) an_zeilen_ohne_null,
             count(distinct linie) as anzahl_linien,
-            min(datum).strftime('%Y-%m-%d') as beginn,
-            max(datum).strftime('%Y-%m-%d') as ende
+            min(rt_red.datum).strftime ('%Y-%m-%d') as beginn,
+            max(rt_red.datum).strftime ('%Y-%m-%d') as ende
         from
-            rt_red
+            cal
+            left join rt_red on cal.datum = rt_red.datum
+        where
+            cal.datum >= '{start_datum.value}'
+            and cal.datum <= '{ende_datum.value}'
         group by all
+        order by all
         """,
         engine=duck
     )
@@ -105,6 +142,14 @@ def _(mo):
     ## Erstellen der Funktionen
     - df_res Erstellen des DataFrames für die ausgewählte Fahrt
     - chart_func Erstellung des Charts
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Funktionen Datenauswertung
     """)
     return
 
@@ -184,9 +229,20 @@ def _(duck):
     return (df_res_list,)
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Funktion Erstellung Chart
+    """)
+    return
+
+
 @app.cell
 def _(alt):
     def chart_func(df_in, x,y, title, suptitle):
+        """
+        Erstellt aus einem Dateframe je Fahrt die Ausgabe als html mit Nutzung der gesamten Breite 
+        """
         chart = alt.Chart(
             df_in, 
             title=alt.TitleParams(text=title, anchor='start', fontSize=14, subtitle=suptitle, subtitleFontSize=12), 
@@ -216,9 +272,36 @@ def _(alt):
 
 
 @app.cell
-def _(chart_intern):
-    chart_intern
-    return
+def _(alt):
+    def chart_func_pdf(df_in, x,y, title, suptitle):
+        """
+        Erstellt aus einem Dateframe je Fahrt die Ausgabe als pdf mit Nutzung mit einem festen Seitenverhälntis
+        """
+        chart = alt.Chart(
+            df_in, 
+            title=alt.TitleParams(text=title, anchor='start', fontSize=14, subtitle=suptitle, subtitleFontSize=12), 
+            width=1000, 
+            height=500
+        ).mark_boxplot(
+            extent=1.5, 
+            box = {'color': 'lightblue'},
+            median={'color': 'orangered'},
+            outliers={'size':3, 'color':'darkgrey', 'fill':'darkgrey'},
+            ticks={'color':'green', 'size':8}
+        ).encode(
+            alt.X(f"{x}:N").title('lfd. Nr. / Haltestelle'),
+            alt.Y(f"{y}:Q").scale(zero=False).title('Abweichung Ankunft in Minuten'),  
+        ).configure_title(
+            fontWeight='normal', fontSize=12
+        ).configure_axis(
+            labelFontWeight='normal',
+            titleFontSize = 14,
+            titleFontWeight='normal', 
+            labelFontSize = 12
+        )
+        return chart
+
+    return (chart_func_pdf,)
 
 
 @app.cell(hide_code=True)
@@ -432,20 +515,82 @@ def _(df_res_list, pd):
 @app.cell
 def _(df_fahrten_sel):
     df_fahrten_sel.to_excel('df_fahrten_sel.xlsx')
+    sel_parquet = 'df_fahrten_sel.parquet'
+    df_fahrten_sel.to_parquet(sel_parquet)
+    df_fahrten_sel
+    return (sel_parquet,)
+
+
+@app.cell
+def _(df_fahrten_sel):
+    df_fahrten_sel.query('linie in ("1330", "1340")')
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Abgleich der Fahrten mit dem Kalender
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo, sel_parquet):
+    _df = mo.sql(
+        f"""
+        select * from read_parquet({sel_parquet})
+        """
+    )
+    return
+
+
+@app.cell
+def _():
+    return
+
+
+@app.cell(hide_code=True)
+def _(cal, duck, ende_datum, mo, sel_parquet, start_datum):
+    _df = mo.sql(
+        f"""
+        pivot (
+            select
+                cal.datum,
+                cal.tg1,
+                cal.tg2,
+                f.linie,
+                f.kurs
+            from
+                cal
+                left join (
+                    from
+                        read_parquet({sel_parquet})
+                ) f on cal.datum in f.list_datum
+            where
+                datum >= '{start_datum.value}'
+                and datum <= '{ende_datum.value}'
+            and linie in (1330, 1340,1630)
+        ) on linie using count(kurs)
+        group by
+            datum
+        """,
+        engine=duck
+    )
     return
 
 
 @app.cell
 def _(df_fahrten_sel):
-    print(len(df_fahrten_sel))
+    print(len(df_fahrten_sel.query('linie in ("1330", "1340")')))
     return
 
 
 @app.cell
-def _(chart_func, df_fahrten_sel, df_res_list, dt, pd):
+def _(chart_func, chart_func_pdf, df_fahrten_sel, df_res_list, dt, pd):
     _arr = []
 
-    for _k, _value in df_fahrten_sel[0:40000].iterrows():
+    for _k, _value in df_fahrten_sel.query('linie in ("1330", "1340")').iterrows():
         _fnr = int(_value['kurs'])
         _df = df_res_list(fnr=_fnr)
 
@@ -477,7 +622,8 @@ def _(chart_func, df_fahrten_sel, df_res_list, dt, pd):
             _str_list += f", ... ({_len_list -5} weitere Tage)"
 
         _chart = chart_func(df_in=_df, x='nr_name', y='an_minute', title=_title, suptitle = f"Erstellt: {_erstellt} Erhobene Tage {_str_list}")
-        #_chart.save(f'out/chart/chart_{_fnr}.pdf')
+        _chart_pdf = chart_func_pdf(df_in=_df, x='nr_name', y='an_minute', title=_title, suptitle = f"Erstellt: {_erstellt} Erhobene Tage {_str_list}")
+        _chart_pdf.save(f'out/chart/chart_{_fnr}.pdf')
         _chart.save(f'out/chart/chart_{_fnr}.html')
         #print(_list_datum)
 
@@ -498,7 +644,7 @@ def _(Font, df_median, ende_datum, pd, start_datum):
     prefix = f"reports/median_{start_datum.value} - {ende_datum.value}"
 
     with pd.ExcelWriter(f'{prefix}.xlsx', engine='openpyxl') as writer:    
-        df_median.sort_values(['buendel', 'linie', 'fnr'], ascending=False).style.format(precision=1).to_excel(writer, sheet_name='median', index=False)
+        df_median.sort_values(['buendel', 'linie', 'fnr'], ascending=True).style.format(precision=1).to_excel(writer, sheet_name='median', index=False)
         workbook  = writer.book
         ws = writer.sheets['median']
         ws.auto_filter.ref = ws.dimensions
@@ -549,7 +695,7 @@ def _(alt, df_median, dropdown):
         alt.Y("stunde:N"),
         alt.Color("median_vorletzte:Q", scale=alt.Scale(scheme='redblue', reverse=True, domainMid=5)),
         tooltip=['fnr', 'stunde','minute' ,'median_vorletzte', 'ri'],
-   
+
 
     )
     chart_agg = _chart
