@@ -25,9 +25,9 @@ def _():
 
 
 @app.cell
-def _(mo):
+def _(dt, mo):
     start_datum = mo.ui.date(label="Start Datum", value= '2025-10-01')
-    ende_datum = mo.ui.date(label="Ende Datum", value= '2026-12-31')
+    ende_datum = mo.ui.date(label="Ende Datum", value= dt.datetime.now().strftime('%Y-%m-%d'))
     return ende_datum, start_datum
 
 
@@ -95,8 +95,6 @@ def _(cal, duck, ende_datum, mo, rt_red, start_datum):
             count(*) as anzahl_zeilen,
             count(*) filter(abwan not null) an_zeilen_ohne_null,
             count(distinct linie) as anzahl_linien,
-            min(rt_red.datum).strftime ('%Y-%m-%d') as beginn,
-            max(rt_red.datum).strftime ('%Y-%m-%d') as ende
         from
             cal
             left join rt_red on cal.datum = rt_red.datum
@@ -141,7 +139,7 @@ def _(mo):
     mo.md(r"""
     ## Erstellen der Funktionen
     - df_res Erstellen des DataFrames für die ausgewählte Fahrt
-    - chart_func Erstellung des Charts
+    - chart_func Erstellung des Charts unterschieden nach html und pdf
     """)
     return
 
@@ -237,11 +235,19 @@ def _(mo):
     return
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    #### Chart html
+    """)
+    return
+
+
 @app.cell
 def _(alt):
     def chart_func(df_in, x,y, title, suptitle):
         """
-        Erstellt aus einem Dateframe je Fahrt die Ausgabe als html mit Nutzung der gesamten Breite 
+        Erstellt aus einem Dateframe je Fahrt die Ausgabe als html mit Nutzung der gesamten Breite (container)
         """
         chart = alt.Chart(
             df_in, 
@@ -252,11 +258,12 @@ def _(alt):
             extent=1.5, 
             box = {'color': 'lightblue'},
             median={'color': 'orangered'},
-            outliers={'size':3, 'color':'darkgrey', 'fill':'darkgrey'},
+            outliers={'size':3, 'color':'darkgrey', 'fill':'darkgrey', 'tooltip':{'content':'data'}},
             ticks={'color':'green', 'size':8}
         ).encode(
             alt.X(f"{x}:N").title('lfd. Nr. / Haltestelle'),
             alt.Y(f"{y}:Q").scale(zero=False).title('Abweichung Ankunft in Minuten'),  
+            #tooltip = f"{x}"
         ).configure_title(
             fontWeight='normal', fontSize=12
         ).configure_axis(
@@ -269,6 +276,14 @@ def _(alt):
 
 
     return (chart_func,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    #### Chart pdf
+    """)
+    return
 
 
 @app.cell
@@ -590,7 +605,7 @@ def _(df_fahrten_sel):
 def _(chart_func, chart_func_pdf, df_fahrten_sel, df_res_list, dt, pd):
     _arr = []
 
-    for _k, _value in df_fahrten_sel.query('linie in ("1330", "1340")').iterrows():
+    for _k, _value in df_fahrten_sel.query('linie in ("1330", "1340")')[1:5].iterrows():
         _fnr = int(_value['kurs'])
         _df = df_res_list(fnr=_fnr)
 
