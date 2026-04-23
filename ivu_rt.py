@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.23.1"
+__generated_with = "0.23.2"
 app = marimo.App(width="medium", sql_output="pandas")
 
 
@@ -86,27 +86,24 @@ def _(mo):
     return
 
 
-@app.cell(hide_code=True)
-def _(cal, duck, ende_datum, mo, rt_red, start_datum):
-    _df = mo.sql(
-        f"""
-        select
-            cal.datum.strftime ('%Y-%m-%d') as datum,
-            count(*) as anzahl_zeilen,
-            count(*) filter(abwan not null) an_zeilen_ohne_null,
-            count(distinct linie) as anzahl_linien,
-        from
-            cal
-            left join rt_red on cal.datum = rt_red.datum
-        where
-            cal.datum >= '{start_datum.value}'
-            and cal.datum <= '{ende_datum.value}'
-        group by all
-        order by all
-        """,
-        engine=duck
-    )
-    return
+app._unparsable_cell(
+    r"""
+    select
+        cal.datum.strftime ('%Y-%m-%d') as datum,
+        count(*) as anzahl_zeilen,
+        count(*) filter(abwan not null) an_zeilen_ohne_null,
+        count(distinct linie) as anzahl_linien,
+    from
+        cal
+        left join rt_red on cal.datum = rt_red.datum
+    where
+        cal.datum >= '{start_datum.value}'
+        and cal.datum <= '{ende_datum.value}'
+    group by all
+    order by all
+    """,
+    column=None, disabled=False, hide_code=True, name="_"
+)
 
 
 @app.cell(hide_code=True)
@@ -122,11 +119,12 @@ def _(duck, mo, rt_red):
     _df = mo.sql(
         f"""
         select
-            haltestelle_name.replace('Ã¼', 'ü').replace ('Ã', 'ß').replace ('Ã¶', 'ö').replace ('Ã¤', 'ä').replace('ß¤', 'ä') as hst
+            haltestelle_name,
+            haltestelle_name.replace ('Ã¼', 'ü').replace ('Ã', 'ß').replace ('Ã¶', 'ö').replace ('Ã¤', 'ä').replace ('ß¤', 'ä') as hst_convert
         from
             rt_red
         where
-            hst like '%Nordwohlde%'
+            hst_convert like '%Nordwohlde%'
         group by all
         """,
         engine=duck
