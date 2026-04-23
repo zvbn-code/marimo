@@ -37,7 +37,7 @@ def _(ende_datum, mo, start_datum):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(duckdb):
     db = 'ivu_rt_superset.db' # aus dem Verzeichnis python/ivu/db
     duck = duckdb.connect(db, read_only=False)
@@ -81,7 +81,7 @@ def _(duck, mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### Auswertung der erhobenen Fahrten in dem Zeitraum
+    ### Auswertung der gemessenen Fahrten in dem Zeitraum
     """)
     return
 
@@ -258,7 +258,7 @@ def _(alt):
             extent=1.5, 
             box = {'color': 'lightblue'},
             median={'color': 'orangered'},
-            outliers={'size':3, 'color':'darkgrey', 'fill':'darkgrey', 'tooltip':{'content':'data'}},
+            outliers={'size':3, 'color':'darkgrey', 'fill':'darkgrey', 'tooltip':{'content':'data'} },
             ticks={'color':'green', 'size':8}
         ).encode(
             alt.X(f"{x}:N").title('lfd. Nr. / Haltestelle'),
