@@ -23,8 +23,8 @@ def _(duckdb):
 
 
 @app.cell
-def _(pd):
-    pd.__version__
+def _(duckdb, pd):
+    print(f"Stand der Versionen Pandas {pd.__version__} DuckDB {duckdb.__version__}")
     return
 
 
@@ -268,6 +268,48 @@ def _(bfkoord, duck, mo, vbn):
 @app.cell
 def _(df_gekuerzt):
     df_gekuerzt.to_excel('gekuerzt.xlsx', index=False)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    _df = mo.sql(
+        f"""
+        select REGEXP_EXTRACT('Bad-Zwischenahn Feld', '^([^\s]*-[^\s]*)')
+        """
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(bfkoord, duck, mo, vbn):
+    df_namen_ortsteile = mo.sql(
+        f"""
+        select
+
+            REGEXP_EXTRACT(bf.name, '^([^\s]*-[^\s]*)') as name_bindestrich_vorne
+
+        from
+            bfkoord bf
+            join vbn on st_dwithin (
+                st_transform (bf.geom, 'EPSG:4326', 'EPSG:25832'),
+                st_transform (vbn.geom, 'EPSG:4326', 'EPSG:25832'),
+                20000
+            )
+        where
+            bf.nummer < 800_000_000
+        group by all
+        order by name_bindestrich_vorne
+
+        """,
+        engine=duck
+    )
+    return (df_namen_ortsteile,)
+
+
+@app.cell
+def _(df_namen_ortsteile):
+    df_namen_ortsteile.to_excel('namen_ortsteile.xlsx', index=False)
     return
 
 
