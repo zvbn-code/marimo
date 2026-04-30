@@ -78,6 +78,11 @@ def _():
         r"Universität\b": "Uni",
         r"Zentraler Omnibusbahnhof\b": "ZOB",
         r"Osterholz-Scharmbeck\b": "OHZ",
+        r"Bremerhaven\b": "BHV",
+        r"Deutsches\b": "dt.",
+        r"Schulzentrum\b": "SZ",
+        r"Bürgermeister\b": "Bgm.",
+
 
         # usw.
     }
@@ -94,7 +99,9 @@ def _():
         "Gießen (Lahn) Haltestelle",
         "Heinrich-Heine Straße (Nord) Haltestelle",
         "Langemarckstraße",
-        "Maximilianplatz Haltestelle"
+        "Maximilianplatz Haltestelle",
+        "Osterholz-Scharmbeck-Garlstedt BW Logistikschule ",
+        "Bremerhaven Deutsches Schifffahrtsmuseum/Stadttheater"
     ]
     return (namen,)
 
@@ -172,6 +179,59 @@ def _(df_bfkoord, duck, mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
+    ### bhfart
+    - zur Nutzung der DHID
+    """)
+    return
+
+
+@app.cell
+def _(pd):
+    # Define the column widths
+
+    _names = ["nummer", "art1", "art2", "dhid"]
+
+    # Read the file separated with spaces
+    df_bhfart = pd.read_csv("hafas/bhfart", names=_names, skiprows=1, delimiter= ' ',encoding='LATIN1', on_bad_lines='skip' )
+    return (df_bhfart,)
+
+
+@app.cell
+def _(df_bhfart):
+    df_bhfart.query('art2 == "A"')
+    return
+
+
+@app.cell(hide_code=True)
+def _(df_bhfart, duck, mo):
+    _df = mo.sql(
+        f"""
+        create or replace table bhfart as
+        select
+            nummer, dhid
+        from
+            df_bhfart
+        where art2 = 'A'
+        """,
+        engine=duck
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(bhfart, duck, mo):
+    _df = mo.sql(
+        f"""
+        from bhfart
+        """,
+        engine=duck
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
     ### Einlesen der VBN-Grenzen
     """)
     return
@@ -211,9 +271,17 @@ def _(mo):
     return
 
 
-@app.cell
+@app.cell(disabled=True)
 def _(duck, haltestelle_kuerzen_regex):
     duck.create_function("haltestelle_kuerzen_regex", haltestelle_kuerzen_regex)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Anwendung auf alle
+    """)
     return
 
 
@@ -238,6 +306,14 @@ def _(bahnhof, duck, mo):
 
 
 @app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    Anwendung auf Haltestellen im VBN
+    """)
+    return
+
+
+@app.cell(hide_code=True)
 def _(bfkoord, duck, mo, vbn):
     df_gekuerzt = mo.sql(
         f"""
@@ -256,6 +332,7 @@ def _(bfkoord, duck, mo, vbn):
             )
         where
             bf.nummer < 800_000_000
+            and laenge > 35
         group by all
         order by
             laenge2 desc
@@ -300,7 +377,6 @@ def _(bfkoord, duck, mo, vbn):
             bf.nummer < 800_000_000
         group by all
         order by name_bindestrich_vorne
-
         """,
         engine=duck
     )
