@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.23.1"
+__generated_with = "0.23.5"
 app = marimo.App(width="medium", sql_output="pandas")
 
 
@@ -42,7 +42,7 @@ def _(ms):
     stations = ms.stations.nearby(POINT, limit=1000)
 
     print(stations)
-    return
+    return (stations,)
 
 
 @app.cell
@@ -70,14 +70,12 @@ def _(duck):
 
 
 @app.cell
-def _(duck):
-    duck.sql("from daily where station = '10224' limit 1000").df().plot(y=['temp','tmin', 'tmax'], x='date')
+def _():
     return
 
 
 @app.cell
-def _(duck):
-    duck.sql("from daily where station = '10224' limit 1000").df().plot(y=['prcp','snwd'], x='date')
+def _():
     return
 
 
@@ -104,6 +102,62 @@ def _(duck):
 @app.cell
 def _(duck):
     duck.sql("from rad").df().plot(x= "Zeitpunkt ('Y-m-d H:i:s')", y="Radweg Kleine Weser")
+    return
+
+
+@app.cell
+def _(stations):
+    stations['name'].to_dict()
+    return
+
+
+@app.cell
+def _(stations):
+    mo_dict = stations['name'].to_dict()
+    return (mo_dict,)
+
+
+@app.cell
+def _(mo_dict):
+    mo_dict
+    return
+
+
+@app.cell
+def _(mo, mo_dict):
+    # With search functionality
+    dropdown = mo.ui.dropdown(    
+    options=mo_dict,    
+    value="10224",    
+    label="Wähle eine Station",    
+    searchable=True,
+    )
+    return (dropdown,)
+
+
+@app.cell
+def _(dropdown):
+    dropdown
+    return
+
+
+@app.cell
+def _(dropdown, duck):
+    duck.sql(f"from daily where station = '{dropdown.selected_key}' limit 1000").df().plot(y=['temp','tmin', 'tmax'], x='date', title=f'{dropdown.selected_key} {dropdown.value}')
+    return
+
+
+@app.cell
+def _(dropdown, duck):
+    duck.sql(f"from daily where station = '{dropdown.selected_key}' limit 1000").df().plot(y=['prcp','snwd'], x='date', title=f'{dropdown.selected_key} {dropdown.value}')
+    return
+
+
+@app.cell
+def _(dropdown, ms):
+    station = ms.stations.meta(f'{dropdown.selected_key}')  # LaGuardia Airport
+
+    print(station)
     return
 
 
