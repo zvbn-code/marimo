@@ -8,6 +8,7 @@ Test mit marimo anhand
     - übergreifenden Statistiken
 - OSM Auswertung über DuckDB osm.py
     - read_osm DuckDB
-- Haltestellennaman verkürzen
-- Ducklake
+- Haltestellennaman verkürzen hst_namen.py
+- Ducklake ducklake.py
+    - Test mit einlesen des HIS Datensatzs https://daten.zvbn.de/his_akt.csv
     - https://ducklake.select/docs/stable/ 
