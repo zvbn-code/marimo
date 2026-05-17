@@ -11,4 +11,6 @@ Test mit marimo anhand
 - Haltestellennaman verkürzen hst_namen.py
 - Ducklake ducklake.py
     - Test mit einlesen des HIS Datensatzs https://daten.zvbn.de/his_akt.csv
-    - https://ducklake.select/docs/stable/ 
+    - https://ducklake.select/docs/stable/
+- JSON Redmine 
+    - Auswertung der JSON aus Redmine für den Import nach DuckDB
